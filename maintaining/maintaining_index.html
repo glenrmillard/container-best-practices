@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Asciidoctor 1.5.4">
+<title>Maintaining</title>
+<link rel="stylesheet" href="http://www.projectatomic.io/stylesheets/application.css">
+</head>
+<body class="article">
+<div id="header">
+</div>
+<div id="content">
+<div class="sect1">
+<h2 id="Maintaining">Maintaining</h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="_lifecycle">Lifecycle</h3>
+<div class="sect3">
+<h4 id="_techniques_for_upgrades">techniques for upgrades</h4>
+<div class="paragraph">
+<p>It may be necessary from time to time to upgrade software within a container
+How to deal with configuration / package updates -
+* I think that with containers, it would probably be much more efficient to edit the Dockerfile and then rebuild.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>In the case of the latest issues (openssl and glibc vulnerability), the most efficient way is the be certain that the latest RHEL base image is available and rebuild.</p>
+</li>
+<li>
+<p>In a case where it is a customer/ISV software component, the vendor/ISV would have to provide a patch/update.</p>
+</li>
+<li>
+<p>In all RHEL containers, it would be advisable to put the following: FROM rhel7:latest -&#8594; This will ensure that the latest RHEL base image with all patches will always be available when the container is built.</p>
+</li>
+<li>
+<p>When the Dockerfile is created, the following is always inserted: RUN yum -y update</p>
+</li>
+<li>
+<p>Recommend that all software for RHEL based containers be installed with yum other than rpm - this way, an update of dependencies will be performed when an update of the base package is performed.</p>
+</li>
+<li>
+<p>If the original github link was included in the Docker container, (perhaps as a LABEL) it could be used to make certain that the latest packages (RHEL or otherwise) are always available. Could then utilize docker inspect to parse the URL to make sure the container is up to date.</p>
+</li>
+<li>
+<p>As for super priv containers, that is a TBD</p>
+</li>
+<li>
+<p>Rollbacks would be a matter of either:</p>
+</li>
+<li>
+<p>building a new container with the rollback in the Dockerfile</p>
+</li>
+<li>
+<p>opening a shell of a running Docker container and performing a rollback(not the best option)</p>
+</li>
+<li>
+<p>Configuration files and scripts should be preserved (for rollback) and then the new ones copied in</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_garbage_collection">Garbage Collection</h3>
+
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<div id="footer-text">
+Last updated 2016-05-16 11:28:44 EDT
+</div>
+</div>
+</body>
+</html>

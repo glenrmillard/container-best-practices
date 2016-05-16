@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Asciidoctor 1.5.4">
+<title>Building Applications</title>
+<link rel="stylesheet" href="http://www.projectatomic.io/stylesheets/application.css">
+</head>
+<body class="article">
+<div id="header">
+</div>
+<div id="content">
+<div class="sect1">
+<h2 id="build">Building Applications</h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="_simple_build">Simple build</h3>
+
+</div>
+<div class="sect2">
+<h3 id="_use_a_build_service">Use a build service</h3>
+
+</div>
+<div class="sect2">
+<h3 id="_container_development_kit">Container Development Kit</h3>
+<div class="sect3">
+<h4 id="_openshift_vm">OpenShift VM</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_kubernetes_vm">Kubernetes VM</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_eclipse_docker_vm">Eclipse/Docker VM</h4>
+<div class="paragraph">
+<p>OLD - OLD - OLD -OLD - OLD - OLD -OLD OLD OLD OLD - OLD - OLD -OLD - OLD - OLD -OLD OLD OLD
+Building a single Docker image once is a simple matter.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>sudo docker build -t &lt;registry_URL&gt;/some/image .</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>This will build the image which could then be pushed to a registry location. Done. However, this immutable image will need to be updated. And this image depends on other images which will be updated, which means this image will need to be rebuilt. If this image is part of a microservice application it is just one of several images that work together as integrated services that comprise an application. Do you really want a developer to build production services from their laptop?</p>
+</div>
+<div class="paragraph">
+<p>Serious work with container technology should automate builds. While there are some unique challenges specific to container automation, generally following continuous integration and delivery best practices is recommended.</p>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_build_environment">Build Environment</h3>
+<div class="paragraph">
+<p>A build environment should have the following characteristics</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>is secure by limiting direct access to the build environment</p>
+</li>
+<li>
+<p>limits access to configure and trigger builds</p>
+</li>
+<li>
+<p>limits access to build sources</p>
+</li>
+<li>
+<p>limits access to base images, those images referenced in the <code>FROM</code> line of a Dockerfile</p>
+</li>
+<li>
+<p>provides access to build logs</p>
+</li>
+<li>
+<p>provides some type of a pipeline or workflow, integrating with external services to trigger builds, report results, etc.</p>
+</li>
+<li>
+<p>provides a way to test built images</p>
+</li>
+<li>
+<p>provides a way to reproduce builds</p>
+</li>
+<li>
+<p>provides a secure registry to store builds</p>
+</li>
+<li>
+<p>provides a mechanism to promote tested builds</p>
+</li>
+<li>
+<p>shares the same kernel as the target production runtime environment</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>A build environment that meets these requirements is difficult to create from scratch. An automation engine like Jenkins is essential to managing a complex pipeline. While a virtual machine-based solution could be created, it is recommended that a dedicated, purpose-built platform such as OpenShift be used.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<div id="footer-text">
+Last updated 2016-05-16 09:59:42 EDT
+</div>
+</div>
+</body>
+</html>

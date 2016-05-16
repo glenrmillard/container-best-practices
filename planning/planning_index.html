@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Asciidoctor 1.5.4">
+<title>Application Planning</title>
+<link rel="stylesheet" href="http://www.projectatomic.io/stylesheets/application.css">
+</head>
+<body class="article">
+<div id="header">
+</div>
+<div id="content">
+<div class="sect1">
+<h2 id="plan">Application Planning</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>As you begin to contemplate the containerization of your application, there are number of factors that
+should be considered prior to authoring a Dockerfile.  You will want to plan out everything from
+how to start the application, to network considerations, to making sure your image is architected in a way that
+can run in multiple environments like Atomic Host or OpenShift.</p>
+</div>
+<div class="paragraph">
+<p>The very act of containerizing any application presents a few hurdles that are perhaps considered
+defacto in a traditional Linux environment.  The following sections highlight these hurdles and
+offer solutions which would be typical in a containerized environment.</p>
+</div>
+<div class="sect2">
+<h3 id="_persistent_storage_simple_database_server">Persistent Storage: Simple Database Server</h3>
+<div class="paragraph">
+<p>Introduce the basic environment and began to foreshadow the perceieved complications</p>
+</div>
+<div class="sect3">
+<h4 id="_traditional_database_server">Traditional database server</h4>
+<div class="paragraph">
+<p>One of the simpler environments in the IT world is a database that serves one or more
+client nodes.  A corporate directory is an example most of us can identify with.  Consider
+the figure below.</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="data:image/png:base64," alt="simple db">
+</div>
+<div class="title">Figure 1. Simple database topology</div>
+</div>
+<div class="paragraph">
+<p>In this scenario, we have a single server running a Linux distribution.  The server functions
+largely as a database server (perhaps postgres) for other clients that can connect to it on
+the network.  The database is capable of connecting to the clients on the network using the
+standard TCP/IP network stack and typically a combination of TCP socket and port.  In the case
+of posgres, the default port is 5432.</p>
+</div>
+<div class="paragraph">
+<p>More importantly, many database implementations store the database files on reliable, Enterprise
+storage such as SANs or robust RAID arrays.  This is done to obviously protect the database
+from data loss. By default, containers have immutable storage; and therefore, if the container
+is deleted, your data will be lost. As a developer, you will need to understand and design
+your containerization in a way that will allow for data to persist regardless of the state
+of the container.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_containerized_environment">Containerized Environment</h4>
+<div class="paragraph">
+<p>In the case of a database server, retaining your data can be critical.  The default storage for
+containers themselves is not persistent but it can be with a little planning.  The most common
+way to allow for data persistence is using one of the <a href="#planning_storage">several methods</a>
+already available to docker or your chosen deployment platform.  The following figure is a simplified
+containerized topography of the same database from above.</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="data:image/png:base64," alt="simple db containerized">
+</div>
+<div class="title">Figure 2. Containerized database</div>
+</div>
+<div class="paragraph">
+<p>Note how the container host, like the traditional Linux deployment, has enterprise storage
+associated with it.  Through the use of a <a href="https://docs.docker.com/engine/userguide/containers/dockervolumes/">docker volumes</a>,
+we can assign storage to containers and those volumes will persist irregardless of the
+state of the container.</p>
+</div>
+<div class="paragraph">
+<p>For more information about planning for persistent storage, check out the
+<a href="#planning_storage">Storage Options</a> section.</p>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_container_interconnection_database_server_with_local_and_distributed_clients">Container Interconnection: Database Server with Local and Distributed Clients</h3>
+<div class="paragraph">
+<p>By definition, distributed application components need to communicate with one another.
+Container technologies encourage developers to make these interconnection points explicit and
+provide a number of mechanisms to coordinate or otherwise enable communication between containers.</p>
+</div>
+<div class="sect3">
+<h4 id="_traditional_database_server_environment">Traditional Database server/environment</h4>
+<div class="paragraph">
+<p>Consider the database example in the previous section.  Once we have established persistent
+storage for the database server, we also need to consider how database clients will connect to it.
+In nearly all cases these connections will occur through a socket, ever over the network or locally
+via UNIX domain socket special file.</p>
+</div>
+<div class="paragraph">
+<p>(Diagram placeholder - Block for running container, inset for listening port on top of container
+block, distinct block outside of container showing shared/mapped directories for UNIX sockets.)</p>
+</div>
+<div class="paragraph">
+<p>Simple non-distributed applications may assume that a database is co-located on the same server
+and use an established port number, or UNIX domain socket path, as their default access mechanism.</p>
+</div>
+<div class="paragraph">
+<p>True multi-node distributed applications may host the database as a distinct node in which case
+communication must occur via the network.  Clients that wish to use the database must be made
+aware of its location, either via explicit configuration or a service discovery mechanism.</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="data:image/png:base64," alt="interconnect single">
+</div>
+<div class="title">Figure 3. Traditional DB environment using both socket and TCP/IP connections</div>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_container_environment_docker">Container environment - Docker</h4>
+<div class="paragraph">
+<p>The previous example shows a traditional database where a single node allows both socket
+and port (TCP/IP) connections.  If we were to "containerize" the database server and
+the database client into seperate containers, this would present a slight challenge in
+the architecture due to the container namespacing.  Consider the following image:</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="data:image/png:base64," alt="single node mult containers">
+</div>
+<div class="title">Figure 4. Single Node Database with server and client in separate containers</div>
+</div>
+<div class="paragraph">
+<p>In this setup, there are actually two clients.  One is containerized and the other is executing
+from the container host directly.  The database is also containerized but isolated by namespacing
+as well.  The database client executing on the host can still communicate with the containerized
+database server via TCP/IP because Docker has an internal network for containers to communication with
+each other and the host.  Once an interconnection mechanism has been established a container developer must ensure
+that service containers are properly configured to allow access to these connections.</p>
+</div>
+<div class="paragraph">
+<p>Some container coordination frameworks, such as Kubernetes, attempt to simplify this use case for
+containers co-located on a single node by sharing the network port space between node-local containers.</p>
+</div>
+<div class="paragraph">
+<p>Further details and examples of networking interconnect options for various contaner frameworks and
+scenarios can be found in the <a href="#planning_network">network considerations</a> section of this document.</p>
+</div>
+<div class="paragraph">
+<p>For non-network connections between containers on a single node, shared filesystem locations, either for
+domain sockets or actual filesystem content, must be set up at the time the containers are launched.
+Docker, for example, allow mapping a host directory to a container directory by adding the following
+argument to the run command:</p>
+</div>
+<div class="paragraph">
+<p>-v &lt;host_directory&gt;:&lt;container_directory&gt;</p>
+</div>
+<div class="paragraph">
+<p>In our DB server example, assuming the database maintains a listening UNIX domain socket in
+"/var/run/postgres" we could launch both our server and client with the following argument included:</p>
+</div>
+<div class="paragraph">
+<p>-v /var/run/postgres:/var/run/postgres</p>
+</div>
+<div class="paragraph">
+<p>This will ensure that both the server and client see the same directory content, exported from the host,
+allowing the client to connect using the expected/default location.</p>
+</div>
+<div class="paragraph">
+<p>Further details and example can be found in the <a href="#planning_storage">storage considerations</a> section of
+this document.</p>
+</div>
+<div class="paragraph">
+<p>Another iteration on this scenario would be where the database server and clients are on different nodes
+and require network access to communicate.  In this case, you must ensure that Docker not only exposes a
+port for the database container but that a port is also exposed to the network so other clients can
+communicate with it.</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="data:image/png:base64," alt="multi node single container">
+</div>
+<div class="title">Figure 5. Multiple node deployment where server and client are separated</div>
+</div>
+<div class="paragraph">
+<p>Notice how in this scenario, the database server is still containerized but the client resides on a different
+node.
+For network connections, Docker provides a simple directive in the Dockerfile to expose a port from the
+running container.  For example, to create a Postgres DB server container that listens on the default
+Postgres port, you would add the following line:</p>
+</div>
+<div class="paragraph">
+<p>EXPOSE 5432</p>
+</div>
+<div class="paragraph">
+<p>You then also need to ensure that you perform the port mapping when the container runs using either the -P or -p
+flags.</p>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_data_initialization">Data Initialization</h3>
+<div class="paragraph">
+<p>A truly stateless application component acquires all configuration information via combination of discovery or injection via a cloud, container or configuration management framework. It assumes that all local storage is ephemeral and that any data that requires persistence beyond a shutdown, reboot or termination must be stored elsewhere.</p>
+</div>
+<div class="paragraph">
+<p>In practice, many applications are not truly stateless in the sense defined above. Instead they require at least some element of persistent state or storage to be made available or "attached" to the component at the time it is launched. Frequently, this storage must be initialized the first time the application is run.</p>
+</div>
+<div class="sect3">
+<h4 id="_examples">Examples</h4>
+<div class="ulist">
+<ul>
+<li>
+<p>Creation of schema/tables and initial population of a relational database</p>
+</li>
+<li>
+<p>Initialization of configuration data, such as the location of a central server or executive to which the application component should connect.</p>
+</li>
+<li>
+<p>Initialization of unique identifying information such as a UUID, key pair or shared secrets</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_key_issues">Key Issues</h4>
+<div class="ulist">
+<ul>
+<li>
+<p>Tracking whether initialization has occurred to ensure it only happens once or, at the very least, only occurs when the user wants it to</p>
+</li>
+<li>
+<p>Selecting persistence between restarts of a component versus persistence beyond termination/removal</p>
+</li>
+<li>
+<p>If data is persistent beyond termination of the component, re-associating the persistent storage with a freshly launched instance of the component (be it a VM or a container)</p>
+</li>
+<li>
+<p>If data is persistent across restarts <em>and</em> updates to an underlying container image, ensuring that the “old” persistent data is still .  (Brent notes that our users have expectations in this area based on RPM behavior.)</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_general_approaches_and_patterns_containers">General Approaches and Patterns - Containers</h4>
+<div class="paragraph">
+<p>Two common patterns have emerged to address components that require one time data initialization.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Automatic Initialization - In this pattern, any component that requires data initialization incorporates a check into initial start up. If the check determines that persistent data is already present, it continues as normal. If persistent data is not present, it performs the required data initialization before moving on to normal start up.</p>
+</li>
+<li>
+<p>Explicit Initialization - In this pattern users must explicitly execute an initialization step prior to running an application component. Details may differ depending on the specific container tool or framework being used.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_persistent_storage_in_docker">Persistent Storage in Docker</h4>
+<div class="paragraph">
+<p>Docker containers provide persistence a few different ways.  Changes to the local file system of a running container persist across starts and stops but are lost if the container is ever removed.  If a user requires persistence beyond removal, Docker provides the concept of "Volumes" which are available in two flavors.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>"Data Volumes" are directories that exist outside of the container file system and whose contents persist even after a container is terminated.</p>
+</li>
+<li>
+<p>"Bind Mounts" are host directories can also be directly mounted into a running container.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>For more details on Docker storage configurations see the <a href="#planning_storage">storage considerations</a> section of this guide.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_framework_support">Framework Support</h4>
+<div class="paragraph">
+<p>This is an area of active development within the various container management frameworks and there is no silver bullet.</p>
+</div>
+<div class="paragraph">
+<p>Generally speaking, if an application component does not provide some mechanism for automatic initialization it falls to the user to identify and perform perform any expected explicit storage initialization.  It is also the user&#8217;s responsibility to track the resulting persistent storage objects during the removal/termination/restart of a container or an update to the underlying container image.</p>
+</div>
+<div class="sect4">
+<h5 id="_explicit_initialization_atomic_cli">Explicit Initialization - Atomic CLI</h5>
+<div class="paragraph">
+<p>The one exception is the Atomic CLI (aka "atomic run") which provides support within its metadata format for encoding any required explicit initialization steps.</p>
+</div>
+<div class="paragraph">
+<p>(Brief example and then reference to atomic CLI docs.)</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_security_and_user_requirements">Security and user requirements</h3>
+
+</div>
+<div class="sect2">
+<h3 id="_host_and_image_synchronization">Host and image synchronization</h3>
+<div class="paragraph">
+<p>Some applications that run in containers require the host and container to more or less be synchronized on certain
+attributes so their behaviors are also similar.  One such common attribute can be time.  The following sections discuss
+best practices to keeping those attributes similar or the same.</p>
+</div>
+<div class="sect3">
+<h4 id="_time">Time</h4>
+<div class="paragraph">
+<p>Consider a case where multiple containers (and the host) are running applications and logging to something like
+a log server.  The log timestamps and information would almost be entirely useless if each container reported a different
+time than the host.</p>
+</div>
+<div class="paragraph">
+<p>The best way to synchronize the time between a container and its host is through the use of bind mounts.  You simply need
+to bind mount the host&#8217;s <em>/etc/localtime</em> with the container&#8217;s <em>/etc/localtime</em>.  We use the <em>ro</em> flag to ensure the container
+can&#8217;t modify the host&#8217;s time zone by default.</p>
+</div>
+<div class="paragraph">
+<p>In your Dockerfile, this can be accomplished by adding the following to your RUN label.</p>
+</div>
+<div class="listingblock">
+<div class="title">Synchronizing the timezone of the host to the container.</div>
+<div class="content">
+<pre class="highlight"><code>-v /etc/localtime:/etc/localtime:ro</code></pre>
+</div>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_machine_id">Machine ID</h4>
+<div class="paragraph">
+<p>The <em>/etc/machine_id</em> file is often used as an identifier for things like applications and logging.  Depending on your
+application, it might be beneficial to also bind mount the machine id of the host into the container.  For example.
+in many cases journald relies on the machine ID for identification.  The sosreport application also uses it.  To bind
+mount the machine ID of the host to the container, add something like the following to your RUN label.</p>
+</div>
+<div class="listingblock">
+<div class="title">Synchronizing the host machine ID with a container</div>
+<div class="content">
+<pre class="highlight"><code>-v /etc/machine_id:/etc/machine_id:ro</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_considerations_for_images_on_atomic_host_and_openshift">Considerations for images on Atomic Host and OpenShift</h3>
+
+</div>
+<div class="sect2">
+<h3 id="_where_to_store_related_components">Where to store related components</h3>
+<div class="sect3">
+<h4 id="_scripts">scripts</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_tar_files">tar files</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_help_files">help files</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_dockerfiles">Dockerfiles</h4>
+
+</div>
+</div>
+<div class="sect2">
+<h3 id="planning_starting_application">Starting your applications within a container</h3>
+<div class="paragraph">
+<p>At some point in the design of your Dockerfile and image, you will need to determine how to start your
+application.  There are three prevalent methods for starting applications:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Call the application binary directly</p>
+</li>
+<li>
+<p>Call a script that results in your binary starting</p>
+</li>
+<li>
+<p>Use systemd to start the application</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>For the most part, there is no single right answer on which method should be used; however, there are
+some softer decision points that might help you decide which would be easiest for you as the
+Dockerfile owner.</p>
+</div>
+<div class="sect3">
+<h4 id="_calling_the_binary_directly">Calling the binary directly</h4>
+<div class="paragraph">
+<p>If your application is not service-oriented, calling the binary directly might be the simplest and most
+straight-forward method to start a container.  There is no memory overhead and no additional packages
+are needed (like systemd and its dependencies).  However, it is more difficult to deal with
+setting environment variables.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_using_a_script">Using a script</h4>
+<div class="paragraph">
+<p>Using a special script to start your application in a container can be a handy way to deal with slightly
+more complex applications.  One upside is that it is generally trivial to set environment variables.  This
+method is also good when you need to call more than a single binary to start the application correctly.
+One downside is that you now have to maintain the script and ensure it is always present in the image.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="planning_use_systemd">Use systemd</h4>
+<div class="paragraph">
+<p>Using systemd to start your application is a great if your application is service-oriented (like httpd).
+It can benefit from leveraging well tested unit files generally delivered with the applications
+themselves and therefore can make complex applications that require environment variables easy to work
+with.  One disadvantage is that systemd will increase the size of your image and there is a small
+amount of memory used for systemd itself.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+As of docker-1.10, the docker run parameter of <em>--privileged</em> is no longer needed to use systemd
+within a container.
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>You can implement using <a href="#creating_using_systemd">systemd fairly simply in your Dockerfile</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_techniques_for_deploying_or_starting_images_from_a_host">Techniques for deploying or starting images from a host</h3>
+<div class="sect3">
+<h4 id="_host_systemd_considerations">host systemd considerations</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_native_docker_ah_unit_file">native docker (ah) unit file</h4>
+<div class="sect4">
+<h5 id="_example_unit_file_atomic_create_unit_file">example unit file - atomic create unit file</h5>
+
+</div>
+</div>
+<div class="sect3">
+<h4 id="_openshift_driven">openshift driven</h4>
+
+</div>
+</div>
+<div class="sect2">
+<h3 id="planning_network">Network Considerations</h3>
+<div class="sect3">
+<h4 id="_single_host">single host</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_multi_host">multi-host</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_aep_ose_docker_considerations">AEP / OSE / Docker considerations</h4>
+
+</div>
+</div>
+<div class="sect2">
+<h3 id="planning_storage">Storage Considerations</h3>
+<div class="paragraph">
+<p>When you architect your container image, storage can certainly be a critical consideration.  The power of containers is
+that they can mimic, replicate, or replace all kinds of applications and therein lies why you must be careful in
+considering how you deal with storage needs.</p>
+</div>
+<div class="paragraph">
+<p>By nature, the storage for containers is ephemeral.  This makes sense because one of the attractions of containers
+is that they can be easily created, deleted, replicated, and so on.  If no consideration to storage is given, the
+container will only have access to its own filesystem.  This means if the container is deleted, whatever information
+whether it is logs or data will be lost.  For some applications, this is perfectly acceptable if not preferred.</p>
+</div>
+<div class="paragraph">
+<p>However, if your application generates important data that should be retained or perhaps could be shared amongst
+multiple containers, you will need to ensure that this storage is setup for the user.</p>
+</div>
+<div class="sect3">
+<h4 id="_persistent_storage_for_containers_data_volumes">Persistent storage for containers: Data Volumes</h4>
+<div class="paragraph">
+<p>Docker defines <a href="https://docs.docker.com/engine/userguide/containers/dockervolumes/">persistent storage</a> in two ways.</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Data volumes</p>
+</li>
+<li>
+<p>Data volume containers</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>However at present, the use of <a href="https://docs.docker.com/engine/userguide/containers/dockervolumes/#data-volumes">data volumes</a>
+is emerging to be the preferred storage option for users of Docker.  The docker website defines a data volume as
+<em>"a specially-designated directory within one or more containers that bypasses the Union File System."</em> It has the distinct
+advantages that they can they can be shared and reused for one or more containers.  Moreover, a data volume will
+persist even if the associated container is deleted.</p>
+</div>
+<div class="paragraph">
+<p>Data volumes must be explicitly created and preferbaly should be named to provide it with a meaningful name.  You can
+manually create a data volume with the <em>docker volume create</em> command.</p>
+</div>
+<div class="listingblock">
+<div class="title">Creating a data volume for persistent storage</div>
+<div class="content">
+<pre class="highlight"><code>$ docker volume create &lt;image_name&gt;</code></pre>
+</div>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+You can also specify a driver name with the -d option
+</td>
+</tr>
+</table>
+</div>
+<div class="sect4">
+<h5 id="_using_data_volumes_in_a_dockerfile">Using data volumes in a Dockerfile</h5>
+<div class="paragraph">
+<p>For developers whose applications require persistent storage, the trick will be instantiating the data volume
+prior to running the image.  This, however, can be achieved leveraging the <a href="#label_action">LABEL metadata</a>
+and applications like atomic.</p>
+</div>
+<div class="paragraph">
+<p>We recommend that the data volume be created through the use of the INSTALL label.  If you recall, the INSTALL label
+is meant to identify a script that should be run prior to ever running the image. In that install script, adding
+something like the following can be used to create the data volume.</p>
+</div>
+<div class="listingblock">
+<div class="title">Creating a data volume in your install script</div>
+<div class="content">
+<pre class="highlight"><code>chroot /host /usr/bin/docker volume create &lt;image_name&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To then use the data volume, the RUN label would need to use the bind mount feature.  Adding the following to your
+RUN label would bind mount the data volume by name:</p>
+</div>
+<div class="listingblock">
+<div class="title">Adding a data volume by name into your RUN label</div>
+<div class="content">
+<pre class="highlight"><code>-v &lt;data_volume_name&gt;:/&lt;mount_path_inside_container&gt;</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_persistent_storage_for_containers_mounting_a_directory_from_the_host">Persistent storage for containers: Mounting a directory from the host</h4>
+<div class="paragraph">
+<p>You can also leverage the host filesystem for persistent storage through the use of bind mounts.  The basic idea for this
+is to use a directory on the host filesystem that will be bind mounted into the container at runtime.  This can be simply
+used by adding a bind mount to your RUN label:</p>
+</div>
+<div class="listingblock">
+<div class="title">Bind mounting a directory from the rootfs to a running container</div>
+<div class="content">
+<pre class="highlight"><code>-v /&lt;path_on_the_rootfs&gt;:/&lt;mount_path_inside_container&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>One downside to this approach is that anyone with privileges to that directory on the host will be able to view and
+possibly alter the content.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_openshift_persistent_storage">OpenShift persistent storage</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_storage_backends_for_persistent_storage">Storage backends for persistent storage</h4>
+
+</div>
+</div>
+<div class="sect2">
+<h3 id="_logging">Logging</h3>
+<div class="paragraph">
+<p>If your application logs actions, errors, and warnings to some sort of log mechanism, you will want to consider how
+to allows users to obtain, review, and possible retain those logs.  The flexibility of a container environment
+can however present some challenges when it comes to logging because typically your containers are separated
+by namespace and cannot leverage the system logging without some explicit action by the users.  There are also
+several solutions for logging containers like:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>using a logging service like rsyslog or fluentd</p>
+</li>
+<li>
+<p>setting the docker daemon&#8217;s log driver</p>
+</li>
+<li>
+<p>logging to a file shared with the host (bind mounting)</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>As a developer, if your application uses logging of some manner, you should be thinking about how you will
+handle your log files.  Each of aforementioned solutions has its pros and cons.</p>
+</div>
+<div class="sect3">
+<h4 id="logging_use_service">Using a logging service</h4>
+<div class="paragraph">
+<p>Most traditional Linux systems use a logging service like <a href="http://www.rsyslog.com/">rsyslog</a> to collect and store
+its log files.  Often the logging service will coordinate logging with journald but nevertheless it too is a service
+will accept log input.</p>
+</div>
+<div class="paragraph">
+<p>If your application uses a logger and you want to take advantage of the host&#8217;s logger, you can bind mount <em>/dev/log</em>
+between the host and container as part of the RUN label like so:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code>-v /dev/log:/dev/log</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Depending on the host distribution, log messages will now be in the host&#8217;s journald and subsequently into
+<em>/var/log/messages</em> assumming the host is using something like rsyslog.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_setting_the_log_driver_for_docker_daemon">Setting the log driver for docker daemon</h4>
+<div class="paragraph">
+<p>Docker has the ability to <a href="https://docs.docker.com/engine/admin/logging/overview/">configure a logging driver</a>.  When
+implemented, it will impact all containers on the system.  This is only useful when you can ensure that the
+host will only be running your application as this might impact other containers.  Therefore this method has limited
+usefulness unless you can ensure the final runtime environment.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="logging_host_shared_storage">Using shared storage with the host</h4>
+<div class="paragraph">
+<p>The use of <a href="#planning_storage">persistent storage</a> can be another effective way to deal with log files whether
+you choose to perform a simple bind mount with the host or data volumes.  Like  using a logging service, it has the
+advantage that the logs can be preserved irregardless of the state of the container.  Shared storage also reduces
+the potential to chew up filesystem space assigned to the container itself.  You can bind mount either a file or
+directory between host and container using the <em>-v</em> flag in your RUN label.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code>-v &lt;host_dir|file&gt;:&lt;image_dir|file&gt;</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_security_and_user_considerations">Security and User considerations</h3>
+<div class="sect3">
+<h4 id="_passing_credentials_and_secrets">Passing credentials and secrets</h4>
+<div class="paragraph">
+<p>Storing sensitive data like credentials is a hot topic, especially because Docker does not provide a designated option for storing and passing secret values to containers.</p>
+</div>
+<div class="paragraph">
+<p>Currently, a very popular way to pass credentials and secrets in a container is specifying them as <strong>environment variables</strong> at container runtime. You as a consumer of such an image don&#8217;t expose any of your sensitive data publicly.</p>
+</div>
+<div class="paragraph">
+<p>However, this approach also has caveats:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>If you commit such a container and push your changes to a registry, the final image will contain also all your sensitive data publicly.</p>
+</li>
+<li>
+<p>Processes inside your container and other containers linked to your container might be able to access this information. Similarily, everything you pass as an environment variable is accessible from the host machine using <strong>docker inspect</strong> as seen in the <a href="https://hub.docker.com/r/openshift/mysql-56-centos7/">mysql example below</a>.</p>
+</li>
+</ul>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code># docker run -d --name mysql_database -e MYSQL_USER=user -e MYSQL_PASSWORD=password -e MYSQL_DATABASE=db -p 3306:3306 openshift/mysql-56-centos
+# docker inspect openshift/mysql-56-centos
+
+&lt;snip&gt;
+
+"Env": [
+            "MYSQL_USER=user",
+            "MYSQL_PASSWORD=password",
+            "MYSQL_DATABASE=db",
+
+&lt;snip&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>There are other ways how to store secrets and although using environment variables might lead to leaking private data in certain corner cases, it still belongs to the safest workarounds available.</p>
+</div>
+<div class="paragraph">
+<p>There are a couple of things to keep in mind when operating with secrets:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>For obvious reasons, you should avoid using default passwords - users tend to forget to change the default configuration and in case a known password leaks, it can be easily misused.</p>
+</li>
+<li>
+<p>Although squashing removes intermediate layers from the final image, secrets from those layers will still be present in the build cache.</p>
+</li>
+</ul>
+</div>
+<div class="sect4">
+<h5 id="_handling_secrets_in_kubernetes">Handling Secrets in Kubernetes</h5>
+<div class="paragraph">
+<p>Containers running through Kubernetes can take advantage of the <strong>secret</strong> resource type to store sensitive data such as passwords or tokens. kubernetes uses tmpfs volumes for storing secrets. To learn how to create and access these, refer to the <a href="http://kubernetes.io/docs/user-guide/secrets/">Kubernetes User Guide</a>.</p>
+</div>
+</div>
+<div class="sect4">
+<h5 id="_other_projects_facilitating_secret_management">Other Projects Facilitating Secret Management</h5>
+<div class="paragraph">
+<p><strong>Custodia</strong></p>
+</div>
+<div class="paragraph">
+<p>Custodia is an open-source project that defines an API for storing and sharing secrets such as passwords and certificates in a way that keeps data secure, manageable and audiatable. Custodia uses the HTTP protocol and a RESTful API as an IPC mechanism over a local Unix Socket. Custodia is fully modular and usrs can control how authentication, authorization and API plugins are combined and exposed. You can learn more details on the project&#8217;s <a href="https://github.com/latchset/custodia">github repository</a> or <a href="https://github.com/latchset/custodia/wiki">wiki page</a>.</p>
+</div>
+<div class="paragraph">
+<p><strong>Vault</strong></p>
+</div>
+<div class="paragraph">
+<p>Another open-source project that aims to handle secure accessing and storing of secrets is Vault. Detailed information about the tool and use cases can be found on the <a href="https://www.vaultproject.io/intro/index.html">Vault project website</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_user_namespace_mapping_docker_1_10_feature">User NameSpace Mapping (docker-1.10 feature)</h4>
+
+</div>
+<div class="sect3">
+<h4 id="__a_href_https_www_openshift_com_promotions_docker_security_html_class_bare_https_www_openshift_com_promotions_docker_security_html_a"><a href="https://www.openshift.com/promotions/docker-security.html" class="bare">https://www.openshift.com/promotions/docker-security.html</a></h4>
+
+</div>
+</div>
+<div class="sect2">
+<h3 id="_preventing_your_image_users_from_filling_the_filesystem">Preventing your image users from filling the filesystem</h3>
+<div class="paragraph">
+<p>Most default docker deployments only set aside about 20GB of storage for each container.  For many applications, that
+amount of storage is more than enough.  But if your containerized application produces significant log output,
+or your deployment scenario restarts containers infrequently, file system space can become a concern.</p>
+</div>
+<div class="paragraph">
+<p>The first step to preventing the container filesystem from filling up is to make sure your images
+are <a href="#creating_concise">small and concise</a>.  This obviously will reduce how much space your
+image consumes from the filesystem right away. However, as a developer, the following techniques
+can be used by you to manage the container filesystem size.</p>
+</div>
+<div class="sect3">
+<h4 id="_ask_for_a_larger_storage_space_on_run">Ask for a larger storage space on run</h4>
+<div class="paragraph">
+<p>One solution to dealing with filesystem space could be to increase the amount of storage allocated to the container when
+your image is run.  This can be achieved with the following switch to <em>docker run</em>.</p>
+</div>
+<div class="listingblock">
+<div class="title">Increase the container storage space to 60GB</div>
+<div class="content">
+<pre class="highlight"><code>--storage-opt size:60</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>If you are using a defined RUN label in your Dockerfile, you could add the switch to that label.  However,
+abuse of this switch could lead to irking users and you should be prudent in using it.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_space_considerations_for_logging">Space considerations for logging</h4>
+<div class="paragraph">
+<p>Logging can sometimes unknowingly consume disk space, particularily when a service or daemon has
+failed.  If your application performs logging, or more specifically verbose logging, consider the
+following approaches to help keep filesystem usage down:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Use logrotate inside the container periodically.</p>
+</li>
+<li>
+<p>Mount your logs to a <a href="#logging_host_shared_storage">shared host filesystem</a></p>
+</li>
+<li>
+<p><a href="#logging_use_service">Use a logging service or the host&#8217;s journalctl (/dev/log)</a></p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_image_naming">Image naming</h3>
+<div class="paragraph">
+<p><a href="https://github.com/projectatomic/ContainerApplicationGenericLabels/blob/master/vendor/redhat/names.md" class="bare">https://github.com/projectatomic/ContainerApplicationGenericLabels/blob/master/vendor/redhat/names.md</a></p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_deployment_considerations">Deployment Considerations</h3>
+<div class="paragraph">
+<p>Preparing applications for production distribution and deployment must carefully consider the supported
+deployment platforms. Production services require high uptime, injection of private or sensitive data,
+storage integration and configuration control. The deployment platform determines methods for load balancing,
+scheduling and upgrading. A platform that does not provide these services requires additional work when
+developing the container packaging.</p>
+</div>
+<div class="sect3">
+<h4 id="_platform">Platform</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_lifecycle">Lifecycle</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_maintenance">Maintenance</h4>
+
+</div>
+<div class="sect3">
+<h4 id="_build_infrastructure">Build infrastructure</h4>
+
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<div id="footer-text">
+Last updated 2016-05-16 09:59:42 EDT
+</div>
+</div>
+</body>
+</html>
