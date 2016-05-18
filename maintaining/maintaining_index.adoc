@@ -8,4 +8,34 @@
 
 === Lifecycle
 ==== techniques for upgrades
+
+Techniques for upgrades/updates inside RHEL containers
+
+It may be necessary from time to time to upgrade software within a container
+
+    * With Docker containers, it would probably be much more efficient to edit the Dockerfile and then rebuild. However, it may not always be possible to do so.
+
+    * To ensure that all of the latest Red Hat packages are in the container, when the Dockerfile is created, the following is always inserted: RUN yum -y update
+
+    * In all RHEL containers, it would be advisable to put the following: **FROM rhel7:latest** -→ This will ensure that the latest RHEL base image with all patches will always be available when the container is built.
+
+    * In the case of zero-day issues (openssl and glibc vulnerability), the most efficient way is the be certain that the latest RHEL base image is available and rebuild.
+
+    * If it is a customer/ISV software component, the vendor/ISV would have to provide a patch/update and either rebuild the container or run an update/install from within a running container.
+
+    * Recommend that all software for RHEL based containers be installed with yum other than rpm - this way, an update of dependencies will be performed when an update of the base package is performed.
+
+    * If the original github link was included in the Docker container, (perhaps as a LABEL) it could be used to make certain that the latest packages (RHEL or otherwise) are always available. Could then utilize docker inspect to parse the URL to make sure the container is up to date.
+
+    * For super priv containers TBD
+
+    * Rollbacks would be a matter of either:
+
+    * a. building a new container with the rollback in the Dockerfile
+
+    * b. opening a shell of a running Docker container and performing a rollback(not the best option)
+
+    * c. Configuration files and scripts should be preserved (for rollback) and then the new ones copied in
+
+
 === Garbage Collection
